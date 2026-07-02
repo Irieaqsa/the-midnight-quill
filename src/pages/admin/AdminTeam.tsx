@@ -186,6 +186,17 @@ export default function AdminTeam() {
                 />
               </div>
 
+              <div className="space-y-1.5">
+                <Label htmlFor="mem-avatar" className="text-xs text-muted-foreground">Avatar Image URL</Label>
+                <Input
+                  id="mem-avatar"
+                  value={avatarUrl}
+                  onChange={(e) => setAvatarUrl(e.target.value)}
+                  className="bg-card border-white/5 h-10"
+                  placeholder="Paste image URL (e.g. /images/team/name.png or external link)"
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="mem-order" className="text-xs text-muted-foreground">Display Order</Label>
