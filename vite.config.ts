@@ -10,6 +10,9 @@ export default defineConfig(({ mode }) => ({
     port: 8080,
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+  define: {
+    'import.meta.env.VITE_API_URL': mode === 'production' ? 'window.location.origin' : '""',
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
