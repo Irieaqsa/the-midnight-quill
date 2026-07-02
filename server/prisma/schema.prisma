@@ -1,0 +1,161 @@
+// ============================================================
+// The Midnight Quill (TMQ) — Backend Database Schema
+// Prisma schema targeting SQLite for self-contained local execution
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------------
+// CORE IDENTITY
+// ------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String?   // nullable to allow future magic-link/OAuth-only accounts
+  name          String
+  role          String    @default("MEMBER") // "MEMBER" | "EDITOR" | "ADMIN"
+  bio           String?
+  avatarUrl     String?
+  isActive      Boolean   @default(true)   // soft-disable instead of hard delete
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  submissions        Submission[]       @relation("SubmissionAuthor")
+  reviewedSubmissions Submission[]      @relation("SubmissionReviewer")
+  comments           Comment[]
+  sessions           Session[]
+}
+
+// Session table — required if using a database-session auth strategy
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// ------------------------------------------------------------
+// SUBMISSIONS & PUBLISHING PIPELINE
+// ------------------------------------------------------------
+
+model Submission {
+  id             String             @id @default(cuid())
+
+  authorId       String
+  author         User               @relation("SubmissionAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  title          String
+  body           String             // full text of the piece (poem/prose/script)
+  excerpt        String?            // short teaser, auto-derivable but stored for archive cards
+  category       String             // "POETRY" | "PROSE" | "SPOKEN_WORD_SCRIPT" | "ESSAY" | "OTHER"
+  status         String             @default("PENDING") // "PENDING" | "IN_REVIEW" | "ACCEPTED" | "PUBLISHED" | "REJECTED"
+
+  // Zero-AI policy enforcement — must be true to persist a submission.
+  aiDeclaration  Boolean            @default(false)
+
+  editorNote     String?
+  reviewerId     String?
+  reviewer       User?              @relation("SubmissionReviewer", fields: [reviewerId], references: [id])
+
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  reviewedAt     DateTime?
+  publishedAt    DateTime?
+  featuredOnDate DateTime?          // one piece max per "Poem of the Day" slot (omitted @unique to simplify SQLite compatibility if needed, or keep it)
+
+  tags           SubmissionTag[]
+  comments       Comment[]
+}
+
+model Tag {
+  id          String          @id @default(cuid())
+  name        String          @unique
+  submissions SubmissionTag[]
+}
+
+// Explicit join table
+model SubmissionTag {
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  tagId        String
+  tag          Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([submissionId, tagId])
+}
+
+model Comment {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  authorId     String
+  author       User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body         String
+  createdAt    DateTime   @default(now())
+}
+
+// ------------------------------------------------------------
+// SITE CONTENT (admin-managed, non-submission)
+// ------------------------------------------------------------
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  name      String
+  role      String   // e.g. "Founder & President", "VP", "Social Media Lead"
+  bio       String?
+  avatarUrl String?
+  order     Int      @default(0)   // display order on Team page
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PodcastEpisode {
+  id           String   @id @default(cuid())
+  title        String
+  description  String
+  spotifyUrl   String
+  coverArtUrl  String?
+  publishedAt  DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Testimonial {
+  id         String   @id @default(cuid())
+  memberName String
+  role       String?
+  quote      String
+  avatarUrl  String?
+  approved   Boolean  @default(false)   // must be approved by Editor+ before public display
+  createdAt  DateTime @default(now())
+}
+
+model InstagramHighlight {
+  id        String   @id @default(cuid())
+  imageUrl  String
+  caption   String?
+  linkUrl   String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+// ------------------------------------------------------------
+// NEWSLETTER
+// ------------------------------------------------------------
+
+model NewsletterSubscriber {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  subscribedAt   DateTime  @default(now())
+  unsubscribedAt DateTime?
+  source         String?   // e.g. "site-footer", "cta-section"
+}
