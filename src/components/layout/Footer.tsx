@@ -97,7 +97,7 @@ export function Footer() {
                 Instagram
               </a>
               <a 
-                href="https://midnightquill.substack.com" 
+                href="https://substack.com/@themidnightquilll?r=8ata8u&utm_campaign=profile&utm_medium=profile-page" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 hover:text-foreground transition-colors"
@@ -106,7 +106,7 @@ export function Footer() {
                 Substack
               </a>
               <a 
-                href="https://open.spotify.com/episode/390VKi8Gva4vNhUKB437qo?si=P4kUbyTrQPyd3_vsXANwDw" 
+                href="https://open.spotify.com/show/5tqK5feXRLmO10ZmQAvD3L" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 hover:text-foreground transition-colors"
