@@ -81,6 +81,7 @@ export default function TeamPage() {
                           src={member.avatarUrl}
                           alt={member.name}
                           className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
                           onError={(e) => {
                             // Fallback to placeholder if custom matched photo doesn't exist
                             (e.target as HTMLImageElement).src = '';
