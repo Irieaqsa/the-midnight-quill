@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import DOMPurify from 'dompurify';
 import AdminLayout from './AdminLayout';
 import { Loader2, FileText, CheckCircle2, XCircle, Send, MessageSquare, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -173,9 +174,10 @@ export default function AdminSubmissions() {
                 </div>
 
                 {/* Body Content */}
-                <div className="prose prose-invert max-w-none text-foreground leading-relaxed text-sm bg-card/40 p-4 rounded border border-white/5 font-serif max-h-[300px] overflow-y-auto whitespace-pre-wrap">
-                  {selectedSub.body}
-                </div>
+                <div 
+                  className="prose prose-invert max-w-none text-foreground leading-relaxed text-sm bg-card/40 p-4 rounded border border-white/5 font-serif max-h-[300px] overflow-y-auto"
+                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(selectedSub.body) }}
+                />
 
                 {/* Editor Notes Input */}
                 <div className="space-y-2">
