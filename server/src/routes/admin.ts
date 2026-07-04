@@ -1,6 +1,8 @@
 import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthenticatedRequest, requireEditor, requireAdmin } from '../middleware/auth';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 const router = Router();
 
 // Submissions List for Reviewers (Editors or Admins)
@@ -593,6 +595,65 @@ router.delete('/calendar/:id', requireAdmin, async (req: AuthenticatedRequest, r
     return res.json({ message: 'Calendar entry deleted successfully' });
   } catch (error) {
     console.error('Delete calendar entry error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET all registered users (ADMIN only)
+router.get('/users', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        avatarUrl: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return res.json({ users });
+  } catch (error) {
+    console.error('Get all users error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST reset user password with generated temporary code (ADMIN only)
+router.post('/users/:id/reset-password', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Generate random 8-character string for temporary password (e.g. TMQ-XYZ123)
+    const rawCode = crypto.randomBytes(4).toString('hex').toUpperCase();
+    const tempPassword = `TMQ-${rawCode}`;
+
+    // Hash it and update
+    const passwordHash = await bcrypt.hash(tempPassword, 10);
+    await prisma.user.update({
+      where: { id },
+      data: {
+        passwordHash,
+        resetToken: null,
+        resetTokenExpires: null,
+      },
+    });
+
+    console.log(`🔑 Admin reset password for ${user.email} to: ${tempPassword}`);
+
+    return res.json({
+      message: 'Temporary password generated successfully',
+      tempPassword,
+      email: user.email,
+    });
+  } catch (error) {
+    console.error('Admin reset password error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

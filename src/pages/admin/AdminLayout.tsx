@@ -69,6 +69,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 <AdminLink to="/admin/calendar" icon={Calendar}>
                   Editorial Calendar
                 </AdminLink>
+                <AdminLink to="/admin/members" icon={Users}>
+                  Member Directory
+                </AdminLink>
                 <AdminLink to="/admin/team" icon={Users}>
                   Team Directory
                 </AdminLink>

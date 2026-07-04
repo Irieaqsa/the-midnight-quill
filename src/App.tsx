@@ -28,6 +28,7 @@ import AdminLogin from "./pages/AdminLogin";
 import DigestPage from "./pages/DigestPage";
 import AdminAnalytics from "./pages/admin/AdminAnalytics";
 import AdminCalendar from "./pages/admin/AdminCalendar";
+import AdminMembers from "./pages/admin/AdminMembers";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -103,6 +104,14 @@ const App = () => (
                   element={
                     <ProtectedRoute allowedRoles={['ADMIN']}>
                       <AdminCalendar />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/admin/members" 
+                  element={
+                    <ProtectedRoute allowedRoles={['ADMIN']}>
+                      <AdminMembers />
                     </ProtectedRoute>
                   } 
                 />

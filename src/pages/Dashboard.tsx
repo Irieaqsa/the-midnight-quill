@@ -4,6 +4,8 @@ import { Layout } from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, PenLine, BookOpen, Clock, Send, ShieldAlert, BadgeHelp, CheckCircle2, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 
 interface Submission {
@@ -22,6 +24,55 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(true);
+
+  // Change Password States
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isPasswordLoading, setIsPasswordLoading] = useState(false);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast.error('All password fields are required.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('New passwords do not match.');
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast.error('New password must be at least 6 characters.');
+      return;
+    }
+
+    setIsPasswordLoading(true);
+    const token = localStorage.getItem('tmq_token');
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/auth/change-password`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success('Password changed successfully.');
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        toast.error(data.error || 'Failed to change password.');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Connection error.');
+    } finally {
+      setIsPasswordLoading(false);
+    }
+  };
 
   // Redirect to auth if not authenticated
   useEffect(() => {
@@ -257,6 +308,55 @@ export default function Dashboard() {
               </div>
             </div>
           )}
+
+          {/* Change Password Form */}
+          <div className="mt-12 p-6 bg-card rounded-lg border border-white/5 animate-fade-up max-w-md">
+            <h2 className="font-display text-xl font-semibold text-foreground mb-1">
+              Account Security
+            </h2>
+            <p className="text-xs text-muted-foreground mb-6">
+              Update your account password.
+            </p>
+
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="current-pass" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Current Password</Label>
+                <Input
+                  id="current-pass"
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  disabled={isPasswordLoading}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="new-pass" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">New Password</Label>
+                <Input
+                  id="new-pass"
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  disabled={isPasswordLoading}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="confirm-new-pass" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Confirm New Password</Label>
+                <Input
+                  id="confirm-new-pass"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  disabled={isPasswordLoading}
+                />
+              </div>
+
+              <Button type="submit" className="w-full mt-2" disabled={isPasswordLoading}>
+                {isPasswordLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Update Password'}
+              </Button>
+            </form>
+          </div>
         </div>
       </div>
     </Layout>
