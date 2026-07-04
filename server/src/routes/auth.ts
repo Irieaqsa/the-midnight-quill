@@ -197,8 +197,11 @@ router.post('/forgot-password', async (req, res) => {
     // Add a comment to explain root causes of SMTP failures
     // Note: SMTP failures in production are typically due to missing environment variables on Render.
     if (!emailSent.success) {
-      console.error(`Root cause warning: Email sending failed. Verify your SMTP env vars on Render dashboard.`);
-      return res.status(500).json({ error: 'Failed to send reset email. Please try again later.' });
+      console.error(`Root cause warning: Email sending failed. Verify your SMTP env vars on Render dashboard.`, emailSent.error);
+      return res.status(500).json({ 
+        error: 'Failed to send reset email. Please try again later.',
+        details: emailSent.error ? (emailSent.error as any).message : 'Unknown SMTP error'
+      });
     }
 
     return res.json({ message: 'If that email exists, a reset link has been sent.' });
