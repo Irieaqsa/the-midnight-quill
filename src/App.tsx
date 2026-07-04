@@ -25,6 +25,9 @@ import AdminTeam from "./pages/admin/AdminTeam";
 import AdminPodcast from "./pages/admin/AdminPodcast";
 import AdminTestimonials from "./pages/admin/AdminTestimonials";
 import AdminLogin from "./pages/AdminLogin";
+import DigestPage from "./pages/DigestPage";
+import AdminAnalytics from "./pages/admin/AdminAnalytics";
+import AdminCalendar from "./pages/admin/AdminCalendar";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -55,6 +58,8 @@ const App = () => (
                 
                 {/* Published archive read paths */}
                 <Route path="/feed" element={<Feed />} />
+                <Route path="/digest" element={<DigestPage />} />
+                <Route path="/digest/:period" element={<DigestPage />} />
                 <Route path="/post/:id" element={<Post />} />
                 <Route path="/author/:id" element={<Profile />} />
                 
@@ -82,6 +87,22 @@ const App = () => (
                   element={
                     <ProtectedRoute allowedRoles={['EDITOR', 'ADMIN']}>
                       <AdminSubmissions />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/admin/analytics" 
+                  element={
+                    <ProtectedRoute allowedRoles={['ADMIN']}>
+                      <AdminAnalytics />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/admin/calendar" 
+                  element={
+                    <ProtectedRoute allowedRoles={['ADMIN']}>
+                      <AdminCalendar />
                     </ProtectedRoute>
                   } 
                 />

@@ -2,7 +2,7 @@ import { ReactNode, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Layout } from '@/components/layout/Layout';
-import { FileText, Users, Headphones, Star, Settings } from 'lucide-react';
+import { FileText, Users, Headphones, Star, Settings, TrendingUp, Calendar } from 'lucide-react';
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -63,6 +63,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             </AdminLink>
             {user.role === 'ADMIN' && (
               <>
+                <AdminLink to="/admin/analytics" icon={TrendingUp}>
+                  Analytics
+                </AdminLink>
+                <AdminLink to="/admin/calendar" icon={Calendar}>
+                  Editorial Calendar
+                </AdminLink>
                 <AdminLink to="/admin/team" icon={Users}>
                   Team Directory
                 </AdminLink>

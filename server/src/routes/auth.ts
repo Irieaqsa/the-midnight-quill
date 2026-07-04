@@ -1,8 +1,10 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { prisma } from '../lib/prisma';
 import { AuthenticatedRequest, requireAuth } from '../middleware/auth';
+import { sendEmail } from '../lib/email';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-for-tmq';
@@ -134,6 +136,115 @@ router.get('/me', requireAuth, async (req: AuthenticatedRequest, res: Response) 
     return res.json({ user });
   } catch (error) {
     console.error('Get me error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Forgot Password Route
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required' });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    
+    // Security practice: do not leak whether user exists.
+    // Return a success status even if the email is not registered.
+    if (!user) {
+      return res.json({ message: 'If that email exists, a reset link has been sent.' });
+    }
+
+    // Generate token
+    const token = crypto.randomBytes(32).toString('hex');
+    const resetTokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const resetTokenExpires = new Date(Date.now() + 3600000); // 1 hour
+
+    // Update user
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetToken: resetTokenHash,
+        resetTokenExpires,
+      },
+    });
+
+    // Construct reset link using request origin
+    const clientUrl = process.env.CLIENT_URL || req.headers.referer || `${req.protocol}://${req.get('host')}`;
+    // Clean trailing slashes
+    const baseClientUrl = clientUrl.replace(/\/+$/, '');
+    const resetLink = `${baseClientUrl}/auth?mode=reset&token=${token}`;
+
+    const mailText = `You are receiving this email because you (or someone else) requested a password reset for your account.\n\n`
+      + `Please click on the following link, or paste it into your browser to complete the process within 1 hour:\n\n`
+      + `${resetLink}\n\n`
+      + `If you did not request this, please ignore this email and your password will remain unchanged.\n`;
+
+    const mailHtml = `<p>You are receiving this email because you (or someone else) requested a password reset for your account.</p>`
+      + `<p>Please click on the link below, or paste it into your browser to complete the process within 1 hour:</p>`
+      + `<p><a href="${resetLink}" style="padding: 10px 20px; background-color: #6366f1; color: white; text-decoration: none; border-radius: 5px; display: inline-block;">Reset Password</a></p>`
+      + `<p>If you did not request this, please ignore this email and your password will remain unchanged.</p>`;
+
+    const emailSent = await sendEmail({
+      to: user.email,
+      subject: 'The Midnight Quill — Password Reset Request',
+      text: mailText,
+      html: mailHtml,
+    });
+
+    // Add a comment to explain root causes of SMTP failures
+    // Note: SMTP failures in production are typically due to missing environment variables on Render.
+    if (!emailSent.success) {
+      console.error(`Root cause warning: Email sending failed. Verify your SMTP env vars on Render dashboard.`);
+      return res.status(500).json({ error: 'Failed to send reset email. Please try again later.' });
+    }
+
+    return res.json({ message: 'If that email exists, a reset link has been sent.' });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Reset Password Route
+router.post('/reset-password', async (req, res) => {
+  const { token, password } = req.body;
+
+  if (!token || !password) {
+    return res.status(400).json({ error: 'Token and new password are required' });
+  }
+
+  try {
+    const resetTokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    const user = await prisma.user.findFirst({
+      where: {
+        resetToken: resetTokenHash,
+        resetTokenExpires: { gt: new Date() },
+      },
+    });
+
+    if (!user) {
+      return res.status(400).json({ error: 'Password reset token is invalid or has expired.' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Update password and invalidate token
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        resetToken: null,
+        resetTokenExpires: null,
+      },
+    });
+
+    return res.json({ message: 'Password has been successfully reset. You can now log in.' });
+  } catch (error) {
+    console.error('Reset password error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

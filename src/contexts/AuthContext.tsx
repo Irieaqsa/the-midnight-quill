@@ -15,6 +15,8 @@ interface AuthContextType {
   signUp: (email: string, password: string, name: string) => Promise<{ error: string | null }>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<{ error: string | null }>;
+  resetPassword: (token: string, password: string) => Promise<{ error: string | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -117,6 +119,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const sendPasswordReset = async (email: string) => {
+    try {
+      const res = await fetch(`${API_URL}/api/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        return { error: null };
+      } else {
+        return { error: data.error || 'Request failed' };
+      }
+    } catch (err) {
+      console.error(err);
+      return { error: 'Could not connect to the authentication server.' };
+    }
+  };
+
+  const resetPassword = async (token: string, password: string) => {
+    try {
+      const res = await fetch(`${API_URL}/api/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, password }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        return { error: null };
+      } else {
+        return { error: data.error || 'Reset failed' };
+      }
+    } catch (err) {
+      console.error(err);
+      return { error: 'Could not connect to the authentication server.' };
+    }
+  };
+
   return (
     <AuthContext.Provider value={{ 
       user, 
@@ -124,6 +164,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUp, 
       signIn, 
       signOut,
+      sendPasswordReset,
+      resetPassword,
     }}>
       {children}
     </AuthContext.Provider>

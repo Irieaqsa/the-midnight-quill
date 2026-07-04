@@ -21,7 +21,7 @@ const passwordSchema = z.object({
     .regex(/[^A-Za-z0-9]/, { message: 'Password must contain at least one special character' }),
 });
 
-type AuthMode = 'signin' | 'signup' | 'forgot-password';
+type AuthMode = 'signin' | 'signup' | 'forgot-password' | 'reset-password';
 
 export default function Auth() {
   const [searchParams] = useSearchParams();
@@ -36,7 +36,7 @@ export default function Auth() {
   const [errors, setErrors] = useState<{ email?: string; password?: string; name?: string }>({});
   const [resetSent, setResetSent] = useState(false);
   
-  const { signIn, signUp, sendPasswordReset, user, loading } = useAuth();
+  const { signIn, signUp, sendPasswordReset, resetPassword, user, loading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -52,6 +52,7 @@ export default function Auth() {
     const urlMode = searchParams.get('mode');
     if (urlMode === 'signup') setMode('signup');
     else if (urlMode === 'forgot') setMode('forgot-password');
+    else if (urlMode === 'reset') setMode('reset-password');
     else setMode('signin');
   }, [searchParams]);
 
@@ -134,7 +135,7 @@ export default function Auth() {
     try {
       const { error } = await signUp(email, password, name);
       if (error) {
-        if (error.message?.includes('already registered')) {
+        if (error.toLowerCase().includes('already registered') || error.toLowerCase().includes('already exists')) {
           toast({
             title: 'Account exists',
             description: 'This email is already registered. Please sign in instead.',
@@ -143,7 +144,7 @@ export default function Auth() {
         } else {
           toast({
             title: 'Sign up failed',
-            description: error.message || 'Unable to create account. Please try again.',
+            description: error || 'Unable to create account. Please try again.',
             variant: 'destructive',
           });
         }
@@ -185,6 +186,55 @@ export default function Auth() {
           title: 'Check your email',
           description: 'If an account exists, you will receive a password reset link.',
         });
+      }
+    } catch {
+      toast({
+        title: 'Error',
+        description: 'An unexpected error occurred. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Reset Password Handler
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const token = searchParams.get('token');
+
+    if (!token) {
+      toast({
+        title: 'Invalid Reset Request',
+        description: 'No password reset token was found in the URL.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!validatePassword(password)) return;
+
+    if (password !== confirmPassword) {
+      setErrors({ password: 'Passwords do not match' });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const { error } = await resetPassword(token, password);
+      if (error) {
+        toast({
+          title: 'Reset failed',
+          description: error || 'Unable to reset your password. The token may be invalid or expired.',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Password reset successful',
+          description: 'Your password has been updated. You can now log in.',
+        });
+        setMode('signin');
+        navigate('/auth');
       }
     } catch {
       toast({
@@ -431,6 +481,67 @@ export default function Auth() {
     </>
   );
 
+  const renderResetPassword = () => (
+    <>
+      <button
+        type="button"
+        onClick={() => setMode('signin')}
+        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to sign in
+      </button>
+
+      <div className="text-center mb-8">
+        <h1 className="font-display text-3xl sm:text-4xl font-semibold text-foreground mb-2">
+          New Password
+        </h1>
+        <p className="text-muted-foreground">
+          Enter and confirm your new password below.
+        </p>
+      </div>
+
+      <form onSubmit={handleResetPassword} className="space-y-5">
+        <div className="space-y-2">
+          <Label htmlFor="reset-password" className="text-sm font-medium">New Password</Label>
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              id="reset-password"
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="pl-10 h-11"
+              disabled={isLoading}
+            />
+          </div>
+          {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="confirm-reset-password" className="text-sm font-medium">Confirm New Password</Label>
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              id="confirm-reset-password"
+              type="password"
+              placeholder="••••••••"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="pl-10 h-11"
+              disabled={isLoading}
+            />
+          </div>
+        </div>
+
+        <Button type="submit" className="w-full h-11 gap-2" disabled={isLoading}>
+          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Update Password <Check className="h-4 w-4" /></>}
+        </Button>
+      </form>
+    </>
+  );
+
   return (
     <div className="min-h-screen flex bg-background">
       {/* Left Panel - Branding */}
@@ -458,6 +569,7 @@ export default function Auth() {
           {mode === 'signin' && renderSignIn()}
           {mode === 'signup' && renderSignUp()}
           {mode === 'forgot-password' && renderForgotPassword()}
+          {mode === 'reset-password' && renderResetPassword()}
         </div>
       </div>
     </div>

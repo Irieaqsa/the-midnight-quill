@@ -33,6 +33,89 @@ app.use('/api/content', contentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 
+import { prisma } from './lib/prisma';
+
+// Helper to escape XML characters
+function escapeXml(unsafe: string): string {
+  return unsafe.replace(/[<>&'"]/g, (c) => {
+    switch (c) {
+      case '<': return '&lt;';
+      case '>': return '&gt;';
+      case '&': return '&amp;';
+      case '\'': return '&apos;';
+      case '"': return '&quot;';
+      default: return c;
+    }
+  });
+}
+
+// Native RSS Feed for TMQ Archive
+app.get('/rss.xml', async (req, res) => {
+  try {
+    const pieces = await prisma.submission.findMany({
+      where: { status: 'PUBLISHED' },
+      orderBy: { publishedAt: 'desc' },
+      take: 40,
+      include: {
+        author: {
+          select: { name: true },
+        },
+        tags: {
+          include: { tag: true },
+        },
+      },
+    });
+
+    const host = req.get('host') || 'the-midnight-quill.onrender.com';
+    const protocol = req.secure ? 'https' : 'http';
+    const siteUrl = `${protocol}://${host}`;
+
+    let xml = `<?xml version="1.0" encoding="UTF-8" ?>\n`;
+    xml += `<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">\n`;
+    xml += `  <channel>\n`;
+    xml += `    <title>The Midnight Quill</title>\n`;
+    xml += `    <link>${siteUrl}</link>\n`;
+    xml += `    <description>A literary sanctuary for raw, human emotional expression.</description>\n`;
+    xml += `    <language>en-us</language>\n`;
+    xml += `    <atom:link href="${siteUrl}/rss.xml" rel="self" type="application/rss+xml" />\n`;
+    
+    if (pieces.length > 0 && pieces[0].publishedAt) {
+      xml += `    <lastBuildDate>${pieces[0].publishedAt.toUTCString()}</lastBuildDate>\n`;
+    }
+
+    for (const piece of pieces) {
+      const pieceUrl = `${siteUrl}/post/${piece.id}`;
+      const pubDate = piece.publishedAt ? piece.publishedAt.toUTCString() : new Date().toUTCString();
+      const authorName = escapeXml(piece.author.name);
+      const title = escapeXml(piece.title);
+      const description = escapeXml(piece.excerpt || piece.body.substring(0, 150) + '...');
+      
+      xml += `    <item>\n`;
+      xml += `      <title>${title}</title>\n`;
+      xml += `      <link>${pieceUrl}</link>\n`;
+      xml += `      <guid isPermaLink="true">${pieceUrl}</guid>\n`;
+      xml += `      <pubDate>${pubDate}</pubDate>\n`;
+      xml += `      <author>noreply@the-midnight-quill.onrender.com (${authorName})</author>\n`;
+      xml += `      <description>${description}</description>\n`;
+      
+      for (const t of piece.tags) {
+        xml += `      <category>${escapeXml(t.tag.name)}</category>\n`;
+      }
+      
+      xml += `    </item>\n`;
+    }
+
+    xml += `  </channel>\n`;
+    xml += `</rss>\n`;
+
+    res.header('Content-Type', 'application/rss+xml; charset=utf-8');
+    return res.send(xml);
+  } catch (error) {
+    console.error('RSS feed error:', error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
 // Health Check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });

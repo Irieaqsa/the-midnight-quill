@@ -25,6 +25,8 @@ model User {
   bio           String?
   avatarUrl     String?
   isActive      Boolean   @default(true)   // soft-disable instead of hard delete
+  resetToken        String?   @unique
+  resetTokenExpires DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -71,6 +73,8 @@ model Submission {
   reviewedAt     DateTime?
   publishedAt    DateTime?
   featuredOnDate DateTime?          // one piece max per "Poem of the Day" slot (omitted @unique to simplify SQLite compatibility if needed, or keep it)
+
+  views          Int                @default(0)
 
   tags           SubmissionTag[]
   comments       Comment[]
@@ -158,4 +162,20 @@ model NewsletterSubscriber {
   subscribedAt   DateTime  @default(now())
   unsubscribedAt DateTime?
   source         String?   // e.g. "site-footer", "cta-section"
+}
+
+// ------------------------------------------------------------
+// EDITORIAL CALENDAR
+// ------------------------------------------------------------
+
+model CalendarEntry {
+  id            String   @id @default(cuid())
+  type          String   // "SITE" | "INSTAGRAM" | "PODCAST"
+  title         String
+  scheduledDate DateTime
+  status        String   @default("PLANNED") // "PLANNED" | "COMPLETED"
+  notes         String?
+  relatedId     String?  // optionally links to related piece or episode ID
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }

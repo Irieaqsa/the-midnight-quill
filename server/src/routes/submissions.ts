@@ -1,4 +1,4 @@
-import { Router, Response } from 'express';
+import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthenticatedRequest, requireAuth } from '../middleware/auth';
 const router = Router();
@@ -141,11 +141,139 @@ router.get('/:id', async (req: AuthenticatedRequest, res: Response) => {
       if (!isAuthor && !isStaff) {
         return res.status(403).json({ error: 'Access denied' });
       }
+    } else {
+      // Increment view count asynchronously
+      prisma.submission.update({
+        where: { id },
+        data: { views: { increment: 1 } },
+      }).catch(err => console.error('Error incrementing views:', err));
     }
 
     return res.json({ submission });
   } catch (error) {
     console.error('Get submission by id error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get Related Pieces
+router.get('/:id/related', async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const currentPiece = await prisma.submission.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        category: true,
+        authorId: true,
+        publishedAt: true,
+        status: true,
+      },
+    });
+
+    if (!currentPiece || currentPiece.status !== 'PUBLISHED') {
+      return res.status(404).json({ error: 'Piece not found' });
+    }
+
+    const includeBlock = {
+      author: {
+        select: {
+          id: true,
+          name: true,
+          avatarUrl: true,
+          bio: true,
+        },
+      },
+      tags: {
+        include: {
+          tag: true,
+        },
+      },
+    };
+
+    // Query 1: Same category
+    const sameCategory = await prisma.submission.findMany({
+      where: {
+        id: { not: currentPiece.id },
+        category: currentPiece.category,
+        status: 'PUBLISHED',
+      },
+      orderBy: { publishedAt: 'desc' },
+      take: 4,
+      include: includeBlock,
+    });
+
+    // Query 2: Same author
+    const sameAuthor = await prisma.submission.findMany({
+      where: {
+        id: { not: currentPiece.id },
+        authorId: currentPiece.authorId,
+        status: 'PUBLISHED',
+      },
+      orderBy: { publishedAt: 'desc' },
+      take: 4,
+      include: includeBlock,
+    });
+
+    // Query 3: Featured around same time window (±30 days)
+    let featuredAroundTime: any[] = [];
+    if (currentPiece.publishedAt) {
+      const thirtyDaysAgo = new Date(currentPiece.publishedAt.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const thirtyDaysAhead = new Date(currentPiece.publishedAt.getTime() + 30 * 24 * 60 * 60 * 1000);
+      featuredAroundTime = await prisma.submission.findMany({
+        where: {
+          id: { not: currentPiece.id },
+          status: 'PUBLISHED',
+          featuredOnDate: {
+            gte: thirtyDaysAgo,
+            lte: thirtyDaysAhead,
+          },
+        },
+        orderBy: { featuredOnDate: 'desc' },
+        take: 4,
+        include: includeBlock,
+      });
+    }
+
+    // Query 4: Recent Fallback
+    const recentFallback = await prisma.submission.findMany({
+      where: {
+        id: { not: currentPiece.id },
+        status: 'PUBLISHED',
+      },
+      orderBy: { publishedAt: 'desc' },
+      take: 4,
+      include: includeBlock,
+    });
+
+    // Deduplicate in memory
+    const relatedList: any[] = [];
+    const seenIds = new Set<string>([currentPiece.id]);
+
+    const addUnique = (pieces: any[]) => {
+      for (const p of pieces) {
+        if (!seenIds.has(p.id)) {
+          seenIds.add(p.id);
+          relatedList.push(p);
+        }
+      }
+    };
+
+    addUnique(sameCategory);
+    if (relatedList.length < 4) {
+      addUnique(sameAuthor);
+    }
+    if (relatedList.length < 4) {
+      addUnique(featuredAroundTime);
+    }
+    if (relatedList.length < 4) {
+      addUnique(recentFallback);
+    }
+
+    return res.json({ related: relatedList.slice(0, 4) });
+  } catch (error) {
+    console.error('Get related pieces error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -4,6 +4,7 @@ import DOMPurify from 'dompurify';
 import { Layout } from '@/components/layout/Layout';
 import { SEOHead } from '@/components/SEOHead';
 import { Button } from '@/components/ui/button';
+import { PieceCard } from '@/components/PieceCard';
 import { 
   ArrowLeft, 
   Calendar,
@@ -51,6 +52,7 @@ interface Submission {
 export default function Post() {
   const { id } = useParams<{ id: string }>();
   const [submission, setSubmission] = useState<Submission | null>(null);
+  const [relatedPieces, setRelatedPieces] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
@@ -89,7 +91,21 @@ export default function Post() {
       }
     }
 
+    async function fetchRelatedPieces() {
+      if (!id) return;
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/submissions/${id}/related`);
+        if (res.ok) {
+          const data = await res.json();
+          setRelatedPieces(data.related || []);
+        }
+      } catch (error) {
+        console.error('Error fetching related pieces:', error);
+      }
+    }
+
     fetchSubmission();
+    fetchRelatedPieces();
   }, [id]);
 
   const formatDate = (dateString: string | null) => {
@@ -262,6 +278,21 @@ export default function Post() {
             </div>
           </div>
         </div>
+        {/* Related Pieces Section */}
+        {relatedPieces.length > 0 && (
+          <div className="py-12 border-t border-white/5 bg-card/5">
+            <div className="container mx-auto px-4 max-w-3xl space-y-6">
+              <h3 className="font-display text-lg font-bold text-foreground">
+                You might also sit with these
+              </h3>
+              <div className="space-y-4">
+                {relatedPieces.map((piece, index) => (
+                  <PieceCard key={piece.id} piece={piece} index={index} />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Comments Section */}
         {submission.comments && submission.comments.length > 0 && (

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { FeedSkeleton } from '@/components/Skeletons';
 import { Input } from '@/components/ui/input';
+import { PieceCard } from '@/components/PieceCard';
 import { 
   BookOpen, 
   Feather, 
@@ -235,71 +236,7 @@ export default function Feed() {
             ) : (
               <div className="space-y-4">
                 {pieces.map((piece, index) => (
-                  <Link
-                    key={piece.id}
-                    to={`/post/${piece.id}`}
-                    className="group block animate-fade-up"
-                    style={{ animationDelay: `${index * 30}ms` }}
-                  >
-                    <article className="p-6 bg-card rounded-lg border border-white/5 hover:border-primary/20 transition-all duration-300">
-                      <div className="flex flex-col gap-2.5">
-                        
-                        {/* Meta Category Row */}
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-primary uppercase tracking-wider">
-                          {getCategoryIcon(piece.category)}
-                          <span>{piece.category.replace(/_/g, ' ')}</span>
-                        </div>
-
-                        {/* Title */}
-                        <h2 className="font-display text-xl sm:text-2xl font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
-                          {piece.title}
-                        </h2>
-
-                        {/* Excerpt */}
-                        {piece.excerpt && (
-                          <p className="text-muted-foreground text-sm leading-relaxed line-clamp-3 italic">
-                            "{piece.excerpt}"
-                          </p>
-                        )}
-
-                        {/* Tag list */}
-                        {piece.tags && piece.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 pt-1">
-                            {piece.tags.map((pt) => (
-                              <span 
-                                key={pt.tag.name}
-                                className="text-[11px] text-muted-foreground/80 hover:text-foreground"
-                              >
-                                #{pt.tag.name}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Bottom Row: Author & Date */}
-                        <div className="flex items-center justify-between text-xs text-muted-foreground pt-4 border-t border-white/5">
-                          <div className="flex items-center gap-2">
-                            <div className="w-5 h-5 rounded-full bg-secondary flex items-center justify-center overflow-hidden">
-                              {piece.author.avatarUrl ? (
-                                <img 
-                                  src={piece.author.avatarUrl} 
-                                  alt="" 
-                                  className="w-5 h-5 rounded-full object-cover"
-                                />
-                              ) : (
-                                <span className="text-[9px] font-bold">
-                                  {piece.author.name.charAt(0).toUpperCase()}
-                                </span>
-                              )}
-                            </div>
-                            <span>By {piece.author.name}</span>
-                          </div>
-                          <span>Published {formatDate(piece.publishedAt)}</span>
-                        </div>
-
-                      </div>
-                    </article>
-                  </Link>
+                  <PieceCard key={piece.id} piece={piece} index={index} />
                 ))}
               </div>
             )}
