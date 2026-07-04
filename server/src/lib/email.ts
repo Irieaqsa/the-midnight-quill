@@ -61,6 +61,7 @@ export const sendEmail = async ({
   // Render free tier blocks standard SMTP ports (25, 465, 587) outbound.
   // If the user uses Resend (detected by host or API key prefix), we use their HTTP API on port 443.
   const isResend = host.includes('resend.com') || pass.startsWith('re_');
+  const isSendGrid = host.includes('sendgrid') || pass.startsWith('SG.');
 
   if (isResend) {
     console.log(`Resend detected. Bypassing blocked SMTP ports and sending via HTTPS API...`);
@@ -102,6 +103,60 @@ export const sendEmail = async ({
 
       req.on('error', (err) => {
         console.error(`❌ HTTPS request error:`, err);
+        resolve({ success: false, error: err });
+      });
+
+      req.write(payload);
+      req.end();
+    });
+  }
+
+  if (isSendGrid) {
+    console.log(`SendGrid detected. Bypassing blocked SMTP ports and sending via HTTPS API...`);
+    return new Promise<{ success: boolean; error?: any }>((resolve) => {
+      // Extract clean email from "Name <email@domain.com>" format
+      const fromEmail = from.includes('<') ? from.match(/<([^>]+)>/)?.[1] : from;
+      const fromName = from.includes('<') ? from.split('<')[0].trim() : undefined;
+
+      const payload = JSON.stringify({
+        personalizations: [{ to: [{ email: to }] }],
+        from: { email: fromEmail, name: fromName },
+        subject,
+        content: [
+          { type: 'text/plain', value: text },
+          ...(html ? [{ type: 'text/html', value: html }] : []),
+        ],
+      });
+
+      const options = {
+        hostname: 'api.sendgrid.com',
+        port: 443,
+        path: '/v3/mail/send',
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${pass}`,
+          'Content-Type': 'application/json',
+          'Content-Length': payload.length,
+        },
+      };
+
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            console.log(`✅ Email sent via SendGrid API to ${to}`);
+            resolve({ success: true });
+          } else {
+            const err = new Error(`SendGrid API returned status ${res.statusCode}: ${data}`);
+            console.error(`❌ SendGrid API error:`, err.message);
+            resolve({ success: false, error: err });
+          }
+        });
+      });
+
+      req.on('error', (err) => {
+        console.error(`❌ HTTPS SendGrid request error:`, err);
         resolve({ success: false, error: err });
       });
 
