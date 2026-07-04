@@ -14,6 +14,8 @@ const getTransporter = async () => {
       port,
       secure: port === 465, // True for 465, false for other ports
       auth: { user, pass },
+      connectionTimeout: 10000, // 10 seconds timeout
+      socketTimeout: 10000,     // 10 seconds timeout
     });
   }
 
