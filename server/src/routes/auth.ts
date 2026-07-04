@@ -5,12 +5,14 @@ import crypto from 'crypto';
 import { prisma } from '../lib/prisma';
 import { AuthenticatedRequest, requireAuth } from '../middleware/auth';
 import { sendEmail } from '../lib/email';
+import { rateLimit } from '../middleware/rateLimiter';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-for-tmq';
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || (JWT_SECRET + '-refresh-fallback');
 
-// Register User
-router.post('/signup', async (req, res) => {
+// Register User (Rate limited to 10 requests per hour)
+router.post('/signup', rateLimit(10), async (req, res) => {
   const { email, password, name } = req.body;
 
   if (!email || !password || !name) {
@@ -43,16 +45,18 @@ router.post('/signup', async (req, res) => {
       },
     });
 
-    const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    const accessToken = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '15m' });
+    const refreshToken = jwt.sign({ id: user.id, role: user.role }, JWT_REFRESH_SECRET, { expiresIn: '7d' });
 
-    res.cookie('token', token, {
+    res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
     return res.status(201).json({
-      token,
+      token: accessToken,
       user: {
         id: user.id,
         email: user.email,
@@ -66,8 +70,8 @@ router.post('/signup', async (req, res) => {
   }
 });
 
-// Login User
-router.post('/login', async (req, res) => {
+// Login User (Rate limited to 10 requests per hour)
+router.post('/login', rateLimit(10), async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -85,16 +89,18 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Invalid email or password' });
     }
 
-    const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    const accessToken = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '15m' });
+    const refreshToken = jwt.sign({ id: user.id, role: user.role }, JWT_REFRESH_SECRET, { expiresIn: '7d' });
 
-    res.cookie('token', token, {
+    res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     return res.json({
-      token,
+      token: accessToken,
       user: {
         id: user.id,
         email: user.email,
@@ -111,6 +117,7 @@ router.post('/login', async (req, res) => {
 // Logout User
 router.post('/logout', (req, res) => {
   res.clearCookie('token');
+  res.clearCookie('refreshToken');
   return res.json({ message: 'Logged out successfully' });
 });
 
@@ -140,8 +147,8 @@ router.get('/me', requireAuth, async (req: AuthenticatedRequest, res: Response) 
   }
 });
 
-// Forgot Password Route
-router.post('/forgot-password', async (req, res) => {
+// Forgot Password Route (Rate limited to 5 requests per hour)
+router.post('/forgot-password', rateLimit(5), async (req, res) => {
   const { email } = req.body;
 
   if (!email) {
@@ -283,6 +290,30 @@ router.put('/change-password', requireAuth, async (req: AuthenticatedRequest, re
   } catch (error) {
     console.error('Change password error:', error);
     return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST Refresh Access Token (extracts refresh cookie)
+router.post('/refresh', async (req, res) => {
+  const { refreshToken } = req.cookies;
+
+  if (!refreshToken) {
+    return res.status(401).json({ error: 'No refresh token provided.' });
+  }
+
+  try {
+    const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as { id: string; role: string };
+    const user = await prisma.user.findUnique({ where: { id: decoded.id } });
+
+    if (!user || !user.isActive) {
+      return res.status(401).json({ error: 'User is inactive or not found.' });
+    }
+
+    const accessToken = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '15m' });
+    return res.json({ token: accessToken });
+  } catch (error) {
+    console.error('Refresh token verify error:', error);
+    return res.status(401).json({ error: 'Invalid or expired refresh token.' });
   }
 });
 

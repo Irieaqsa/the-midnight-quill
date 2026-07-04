@@ -47,6 +47,7 @@ interface Submission {
   };
   tags: Tag[];
   comments: Comment[];
+  score: string | null;
 }
 
 export default function Post() {
@@ -188,6 +189,17 @@ export default function Post() {
                   {getCategoryIcon(submission.category)}
                   {submission.category.replace(/_/g, ' ')}
                 </span>
+                {submission.score && (
+                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                    submission.score === 'MASTERWORK'
+                      ? 'bg-amber-500/10 text-amber-400 border border-amber-500/25'
+                      : submission.score === 'FEATURED_STANDARD'
+                      ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/25'
+                      : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25'
+                  }`}>
+                    {submission.score.replace(/_/g, ' ')}
+                  </span>
+                )}
                 {submission.tags && submission.tags.map((t) => (
                   <span key={t.tag.name} className="px-2.5 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs">
                     #{t.tag.name}
@@ -221,9 +233,9 @@ export default function Post() {
                       <User className="h-4 w-4 text-muted-foreground" />
                     )}
                   </div>
-                  <span className="font-semibold text-foreground text-sm">
+                  <Link to={`/author/${submission.author.id}`} className="font-semibold text-foreground text-sm hover:text-primary transition-colors">
                     {submission.author.name}
-                  </span>
+                  </Link>
                 </div>
 
                 <span className="text-white/10">·</span>
@@ -269,7 +281,7 @@ export default function Post() {
               </div>
               <div>
                 <h3 className="font-display text-lg font-semibold text-foreground mb-1">
-                  About {submission.author.name}
+                  About <Link to={`/author/${submission.author.id}`} className="hover:text-primary transition-colors">{submission.author.name}</Link>
                 </h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {submission.author.bio || 'Core member of The Midnight Quill writing community.'}

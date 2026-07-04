@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Feather, BookOpen, BookMarked } from 'lucide-react';
 
 export interface PieceCardProps {
@@ -23,6 +23,8 @@ export interface PieceCardProps {
 }
 
 export function PieceCard({ piece, index = 0 }: PieceCardProps) {
+  const navigate = useNavigate();
+
   const formatDate = (dateString: string) => {
     if (!dateString) return 'Pending';
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -46,9 +48,9 @@ export function PieceCard({ piece, index = 0 }: PieceCardProps) {
   };
 
   return (
-    <Link
-      to={`/post/${piece.id}`}
-      className="group block animate-fade-up"
+    <div
+      onClick={() => navigate(`/post/${piece.id}`)}
+      className="group block animate-fade-up cursor-pointer"
       style={{ animationDelay: `${index * 30}ms` }}
     >
       <article className="p-6 bg-card rounded-lg border border-white/5 hover:border-primary/20 transition-all duration-300">
@@ -87,27 +89,32 @@ export function PieceCard({ piece, index = 0 }: PieceCardProps) {
 
           {/* Bottom Row: Author & Date */}
           <div className="flex items-center justify-between text-xs text-muted-foreground pt-4 border-t border-white/5">
-            <div className="flex items-center gap-2">
-              <div className="w-5 h-5 rounded-full bg-secondary flex items-center justify-center overflow-hidden">
-                {piece.author.avatarUrl ? (
-                  <img
-                    src={piece.author.avatarUrl}
-                    alt=""
-                    className="w-5 h-5 rounded-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <span className="text-[9px] font-bold">
-                    {piece.author.name.charAt(0).toUpperCase()}
-                  </span>
-                )}
-              </div>
-              <span>By {piece.author.name}</span>
+            <div 
+              className="flex items-center gap-2"
+              onClick={(e) => e.stopPropagation()} // Stop navigation to post detail
+            >
+              <Link to={`/author/${piece.author.id}`} className="flex items-center gap-2 hover:text-primary transition-colors">
+                <div className="w-5 h-5 rounded-full bg-secondary flex items-center justify-center overflow-hidden">
+                  {piece.author.avatarUrl ? (
+                    <img
+                      src={piece.author.avatarUrl}
+                      alt=""
+                      className="w-5 h-5 rounded-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <span className="text-[9px] font-bold">
+                      {piece.author.name.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <span>By {piece.author.name}</span>
+              </Link>
             </div>
             <span>Published {formatDate(piece.publishedAt)}</span>
           </div>
         </div>
       </article>
-    </Link>
+    </div>
   );
 }

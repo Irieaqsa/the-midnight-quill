@@ -44,6 +44,7 @@ interface Post {
   published_at: string | null;
   view_count: number;
   likes: { count: number }[];
+  score?: string | null;
 }
 
 export default function Profile() {
@@ -63,45 +64,39 @@ export default function Profile() {
     if (!id) return;
 
     try {
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle();
-
-      if (profileError) throw profileError;
-
-      if (!profileData) {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/content/authors/${id}`);
+      if (!res.ok) {
         setNotFound(true);
         return;
       }
 
-      setProfile(profileData);
+      const data = await res.json();
+      
+      // Map properties to match what the component expects
+      setProfile({
+        id: data.author.id,
+        username: data.author.name, // fallback
+        display_name: data.author.name,
+        bio: data.author.bio,
+        avatar_url: data.author.avatarUrl,
+        website: null,
+        created_at: data.author.createdAt,
+      });
 
-      const { data: postsData, error: postsError } = await supabase
-        .from('posts')
-        .select(`
-          id,
-          title,
-          excerpt,
-          post_type,
-          published_at,
-          view_count,
-          likes(count)
-        `)
-        .eq('author_id', id)
-        .eq('status', 'published')
-        .order('published_at', { ascending: false });
+      // Map posts
+      const mappedPosts = (data.submissions || []).map((sub: any) => ({
+        id: sub.id,
+        title: sub.title,
+        excerpt: sub.excerpt,
+        post_type: sub.category === 'POETRY' ? 'poetry' : 'prose',
+        published_at: sub.publishedAt || sub.createdAt,
+        view_count: sub.views || 0,
+        score: sub.score,
+        likes: [],
+      }));
 
-      if (postsError) throw postsError;
-
-      setPosts(postsData || []);
-
-      const likes = (postsData || []).reduce((sum, post) => {
-        return sum + (post.likes?.[0]?.count || 0);
-      }, 0);
-      setTotalLikes(likes);
-
+      setPosts(mappedPosts);
+      setTotalLikes(0); // placeholder since comments/likes are offline
     } catch (error) {
       console.error('Error fetching profile:', error);
       setNotFound(true);
@@ -369,9 +364,22 @@ export default function Profile() {
                           </span>
                           
                           <div className="flex-1 min-w-0">
-                            <h3 className="font-display font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1 mb-2">
-                              {post.title}
-                            </h3>
+                            <div className="flex items-center gap-2 mb-2 flex-wrap">
+                              <h3 className="font-display font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1">
+                                {post.title}
+                              </h3>
+                              {post.score && (
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                                  post.score === 'MASTERWORK'
+                                    ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                    : post.score === 'FEATURED_STANDARD'
+                                    ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
+                                    : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                }`}>
+                                  {post.score.replace(/_/g, ' ')}
+                                </span>
+                              )}
+                            </div>
                             {post.excerpt && (
                               <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
                                 {post.excerpt}

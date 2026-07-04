@@ -411,4 +411,56 @@ router.get('/digest', async (req: Request, res: Response) => {
   }
 });
 
+// GET Public Author Profile details (including published submissions with badge scores)
+router.get('/authors/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const author = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        bio: true,
+        avatarUrl: true,
+        createdAt: true,
+      },
+    });
+
+    if (!author) {
+      return res.status(404).json({ error: 'Author profile not found' });
+    }
+
+    const submissions = await prisma.submission.findMany({
+      where: {
+        authorId: id,
+        status: 'PUBLISHED',
+      },
+      orderBy: { publishedAt: 'desc' },
+      include: {
+        author: {
+          select: {
+            id: true,
+            name: true,
+            avatarUrl: true,
+          },
+        },
+        tags: {
+          include: {
+            tag: true,
+          },
+        },
+      },
+    });
+
+    return res.json({
+      author,
+      submissions,
+    });
+  } catch (error) {
+    console.error('Get author profile error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

@@ -75,9 +75,11 @@ model Submission {
   featuredOnDate DateTime?          // one piece max per "Poem of the Day" slot (omitted @unique to simplify SQLite compatibility if needed, or keep it)
 
   views          Int                @default(0)
+  score          String?            // "MASTERWORK" | "FEATURED_STANDARD" | "PUBLICATION_READY"
 
   tags           SubmissionTag[]
   comments       Comment[]
+  revisions      DraftRevision[]
 }
 
 model Tag {
@@ -178,4 +180,13 @@ model CalendarEntry {
   relatedId     String?  // optionally links to related piece or episode ID
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+model DraftRevision {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  title        String
+  body         String
+  createdAt    DateTime   @default(now())
 }

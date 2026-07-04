@@ -17,6 +17,7 @@ interface Submission {
   aiDeclaration: boolean;
   editorNote: string | null;
   createdAt: string;
+  score: 'MASTERWORK' | 'FEATURED_STANDARD' | 'PUBLICATION_READY' | null | string;
   author: {
     name: string;
     email: string;
@@ -30,6 +31,26 @@ export default function AdminSubmissions() {
   const [editorNote, setEditorNote] = useState('');
   const [featuredDate, setFeaturedDate] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Score & Revisions State
+  const [score, setScore] = useState<string>('');
+  const [revisions, setRevisions] = useState<any[]>([]);
+  const [selectedRevision, setSelectedRevision] = useState<any | null>(null);
+
+  const fetchRevisions = async (subId: string) => {
+    const token = localStorage.getItem('tmq_token');
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/submissions/${subId}/revisions`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRevisions(data.revisions || []);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const fetchSubmissions = async () => {
     const token = localStorage.getItem('tmq_token');
@@ -65,7 +86,7 @@ export default function AdminSubmissions() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ status, editorNote }),
+        body: JSON.stringify({ status, editorNote, score }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -73,6 +94,7 @@ export default function AdminSubmissions() {
         fetchSubmissions();
         setSelectedSub(null);
         setEditorNote('');
+        setScore('');
       } else {
         toast.error(data.error || 'Update failed.');
       }
@@ -140,6 +162,9 @@ export default function AdminSubmissions() {
                   onClick={() => {
                     setSelectedSub(sub);
                     setEditorNote(sub.editorNote || '');
+                    setScore(sub.score || '');
+                    setSelectedRevision(null);
+                    fetchRevisions(sub.id);
                   }}
                   className={`p-4 bg-card rounded-lg border cursor-pointer hover:border-primary/20 transition-all duration-200 ${
                     selectedSub?.id === sub.id ? 'border-primary/40 bg-primary/5' : 'border-white/5'
@@ -192,6 +217,24 @@ export default function AdminSubmissions() {
                     className="bg-card border-white/5 text-sm h-20"
                     disabled={actionLoading}
                   />
+                </div>
+
+                {/* Curation Score Badge Selection */}
+                <div className="space-y-2">
+                   <span className="text-xs font-semibold text-muted-foreground block">
+                     Curation Score Badge
+                   </span>
+                   <select
+                     value={score}
+                     onChange={(e) => setScore(e.target.value)}
+                     disabled={actionLoading}
+                     className="w-full bg-card border border-white/5 rounded p-2 text-sm text-foreground outline-none focus:border-primary/50 transition-colors"
+                   >
+                     <option value="">None (Standard Publication)</option>
+                     <option value="MASTERWORK">Masterwork (Gold Badge)</option>
+                     <option value="FEATURED_STANDARD">Featured Standard (Indigo Badge)</option>
+                     <option value="PUBLICATION_READY">Publication Ready (Emerald Badge)</option>
+                   </select>
                 </div>
 
                 {/* Actions Button Grid */}
@@ -263,6 +306,62 @@ export default function AdminSubmissions() {
                       >
                         Schedule
                       </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Revisions Log (Read-Only) */}
+                {revisions.length > 0 && (
+                  <div className="p-4 bg-secondary/10 border border-white/5 rounded-lg space-y-3 mt-4">
+                    <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="h-3.5 w-3.5" />
+                      Revision Snapshots Log ({revisions.length})
+                    </span>
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* List */}
+                      <div className="space-y-1 max-h-[150px] overflow-y-auto pr-2 border-r border-white/5">
+                        {revisions.map((rev) => (
+                          <button
+                            key={rev.id}
+                            type="button"
+                            onClick={async () => {
+                              const token = localStorage.getItem('tmq_token');
+                              const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/submissions/${selectedSub.id}/revisions/${rev.id}`, {
+                                headers: { 'Authorization': `Bearer ${token}` },
+                              });
+                              if (res.ok) {
+                                const data = await res.json();
+                                setSelectedRevision(data.revision);
+                              }
+                            }}
+                            className={`w-full text-left p-1.5 rounded text-[11px] transition-smooth block truncate ${
+                              selectedRevision?.id === rev.id 
+                                ? 'bg-primary/10 text-primary' 
+                                : 'hover:bg-white/5'
+                            }`}
+                          >
+                            {new Date(rev.createdAt).toLocaleString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </button>
+                        ))}
+                      </div>
+                      {/* Preview */}
+                      <div className="text-xs text-muted-foreground max-h-[150px] overflow-y-auto font-serif whitespace-pre-wrap leading-relaxed pr-1">
+                        {selectedRevision ? (
+                          <>
+                            <p className="font-semibold text-foreground mb-1">Title: {selectedRevision.title}</p>
+                            <p>{selectedRevision.body.replace(/<[^>]*>/g, '')}</p>
+                          </>
+                        ) : (
+                          <div className="h-full flex items-center justify-center text-center text-[10px] text-muted-foreground/60 italic pt-6">
+                            Click a snapshot to view history content
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}

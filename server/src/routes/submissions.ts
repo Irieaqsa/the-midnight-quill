@@ -278,4 +278,170 @@ router.get('/:id/related', async (req: Request, res: Response) => {
   }
 });
 
+// PUT Update Submission (Draft/Pending pieces only, Author only)
+router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const { id } = req.params;
+  const { title, body, excerpt, category, tags } = req.body;
+
+  if (!title || !body || !category) {
+    return res.status(400).json({ error: 'Title, body, and category are required' });
+  }
+
+  try {
+    const currentPiece = await prisma.submission.findUnique({
+      where: { id },
+    });
+
+    if (!currentPiece) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+
+    if (currentPiece.authorId !== req.user!.id) {
+      return res.status(403).json({ error: 'Access denied. You can only edit your own submissions.' });
+    }
+
+    if (currentPiece.status === 'PUBLISHED') {
+      return res.status(400).json({ error: 'Cannot edit a piece after it has been published.' });
+    }
+
+    // 5-minute debounced Snapshotting logic
+    const lastRevision = await prisma.draftRevision.findFirst({
+      where: { submissionId: id },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const fiveMinutes = 5 * 60 * 1000;
+    if (!lastRevision || (Date.now() - lastRevision.createdAt.getTime() > fiveMinutes)) {
+      await prisma.draftRevision.create({
+        data: {
+          submissionId: id,
+          title: currentPiece.title,
+          body: currentPiece.body,
+        },
+      });
+    }
+
+    const computedExcerpt = excerpt || (body.length > 150 ? body.substring(0, 147) + '...' : body);
+
+    // Update submission
+    const updated = await prisma.submission.update({
+      where: { id },
+      data: {
+        title,
+        body,
+        excerpt: computedExcerpt,
+        category,
+        status: 'PENDING', // Reset status to PENDING on edit for review
+      },
+    });
+
+    // Handle tags update (clear old and insert new)
+    if (tags && Array.isArray(tags)) {
+      await prisma.submissionTag.deleteMany({
+        where: { submissionId: id },
+      });
+
+      for (const tagName of tags) {
+        const cleanedName = tagName.trim().toLowerCase();
+        if (cleanedName.length === 0) continue;
+
+        const tag = await prisma.tag.upsert({
+          where: { name: cleanedName },
+          update: {},
+          create: { name: cleanedName },
+        });
+
+        await prisma.submissionTag.create({
+          data: {
+            submissionId: id,
+            tagId: tag.id,
+          },
+        }).catch(() => {}); // ignore duplicates
+      }
+    }
+
+    return res.json({
+      message: 'Submission updated successfully',
+      submission: updated,
+    });
+  } catch (error) {
+    console.error('Update submission error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET all snapshots for a draft (Author or Staff only)
+router.get('/:id/revisions', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const piece = await prisma.submission.findUnique({
+      where: { id },
+    });
+
+    if (!piece) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+
+    const isAuthor = piece.authorId === req.user!.id;
+    const isStaff = req.user!.role === 'EDITOR' || req.user!.role === 'ADMIN';
+
+    if (!isAuthor && !isStaff) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const revisions = await prisma.draftRevision.findMany({
+      where: { submissionId: id },
+      select: {
+        id: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return res.json({ revisions });
+  } catch (error) {
+    console.error('Get revisions error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET a specific snapshot content (Author or Staff only)
+router.get('/:id/revisions/:revisionId', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const { id, revisionId } = req.params;
+
+  try {
+    const piece = await prisma.submission.findUnique({
+      where: { id },
+    });
+
+    if (!piece) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+
+    const isAuthor = piece.authorId === req.user!.id;
+    const isStaff = req.user!.role === 'EDITOR' || req.user!.role === 'ADMIN';
+
+    if (!isAuthor && !isStaff) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const revision = await prisma.draftRevision.findFirst({
+      where: {
+        id: revisionId,
+        submissionId: id,
+      },
+    });
+
+    if (!revision) {
+      return res.status(404).json({ error: 'Revision not found' });
+    }
+
+    return res.json({ revision });
+  } catch (error) {
+    console.error('Get revision detail error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

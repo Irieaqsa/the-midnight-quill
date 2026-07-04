@@ -43,6 +43,89 @@ export default function Write() {
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(!!editId);
 
+  // Revisions States
+  const [revisions, setRevisions] = useState<any[]>([]);
+  const [selectedRevision, setSelectedRevision] = useState<any | null>(null);
+
+  const fetchRevisions = async () => {
+    if (!editId) return;
+    const token = localStorage.getItem('tmq_token');
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/submissions/${editId}/revisions`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRevisions(data.revisions || []);
+      }
+    } catch (err) {
+      console.error('Error loading revisions:', err);
+    }
+  };
+
+  const handleRestoreRevision = async (revId: string) => {
+    if (!confirm('Are you sure you want to restore this revision? It will overwrite your current editor text.')) return;
+    const token = localStorage.getItem('tmq_token');
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/submissions/${editId}/revisions/${revId}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTitle(data.revision.title);
+        setContent(data.revision.body);
+        setSelectedRevision(null);
+        toast({
+          title: 'Restored!',
+          description: 'Piece restored to selected revision snapshot.',
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: 'Error restoring',
+        description: 'Failed to restore revision.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Background Auto-Save Loop
+  useEffect(() => {
+    if (!editId || !title.trim() || !content.trim()) return;
+
+    const timer = setTimeout(async () => {
+      const token = localStorage.getItem('tmq_token');
+      const submissionData = {
+        title,
+        body: content,
+        excerpt,
+        category,
+        tags,
+        aiDeclaration: true,
+      };
+
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/submissions/${editId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify(submissionData),
+        });
+        if (res.ok) {
+          console.log('Draft auto-saved.');
+          fetchRevisions();
+        }
+      } catch (err) {
+        console.error('Auto-save error:', err);
+      }
+    }, 10000); // 10s debounce
+
+    return () => clearTimeout(timer);
+  }, [title, content, excerpt, category, tags, editId]);
+
   // Calculate word count
   const wordCount = countWords(content);
 
@@ -93,6 +176,7 @@ export default function Write() {
     }
 
     loadSubmission();
+    fetchRevisions();
   }, [editId, user, navigate, toast]);
 
   // Add Tag
@@ -367,6 +451,81 @@ export default function Write() {
                 </p>
               </div>
             </div>
+
+            {/* Revision History Section (only if editing an existing piece) */}
+            {editId && revisions.length > 0 && (
+              <div className="p-6 bg-card rounded-lg border border-white/5 mt-8 space-y-4 animate-fade-up">
+                <div className="flex items-center gap-2 text-primary font-semibold">
+                  <Clock className="h-5 w-5" />
+                  <h3 className="font-display text-lg">Revision History</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Select a version to preview and restore it. Versions are auto-saved every 5 minutes of editing:
+                </p>
+
+                <div className="grid sm:grid-cols-3 gap-4">
+                  {/* Left: Revisions list */}
+                  <div className="sm:col-span-1 border-r border-white/5 pr-4 max-h-[250px] overflow-y-auto space-y-1.5">
+                    {revisions.map((rev) => (
+                      <button
+                        key={rev.id}
+                        type="button"
+                        onClick={async () => {
+                          const token = localStorage.getItem('tmq_token');
+                          const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/submissions/${editId}/revisions/${rev.id}`, {
+                            headers: { 'Authorization': `Bearer ${token}` },
+                          });
+                          if (res.ok) {
+                            const data = await res.json();
+                            setSelectedRevision(data.revision);
+                          }
+                        }}
+                        className={`w-full text-left p-2.5 rounded text-xs transition-smooth ${
+                          selectedRevision?.id === rev.id 
+                            ? 'bg-primary/10 text-primary border border-primary/20' 
+                            : 'hover:bg-white/5 border border-transparent'
+                        }`}
+                      >
+                        {new Date(rev.createdAt).toLocaleString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Right: Revision Preview */}
+                  <div className="sm:col-span-2 pl-2 space-y-3 flex flex-col justify-between min-h-[200px]">
+                    {selectedRevision ? (
+                      <>
+                        <div className="space-y-2">
+                          <h4 className="font-semibold text-foreground text-sm leading-tight">
+                            Preview: {selectedRevision.title}
+                          </h4>
+                          <div className="text-xs text-muted-foreground border border-white/5 p-3 rounded bg-black/25 max-h-[180px] overflow-y-auto font-serif whitespace-pre-wrap">
+                            {selectedRevision.body.replace(/<[^>]*>/g, '') /* Strip HTML tags for preview */}
+                          </div>
+                        </div>
+                        <Button 
+                          type="button" 
+                          size="sm" 
+                          className="cta-primary mt-2" 
+                          onClick={() => handleRestoreRevision(selectedRevision.id)}
+                        >
+                          Restore This Version
+                        </Button>
+                      </>
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-center text-xs text-muted-foreground p-6">
+                        Click a timestamp to preview past content
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
           </div>
         </div>

@@ -27,6 +27,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const refreshAccessToken = async (): Promise<string | null> => {
+    try {
+      const res = await fetch(`${API_URL}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem('tmq_token', data.token);
+        return data.token;
+      }
+    } catch (err) {
+      console.error('Error refreshing token:', err);
+    }
+    return null;
+  };
+
   // Helper to fetch user data with local token
   const fetchCurrentUser = async (token: string) => {
     try {
@@ -39,7 +56,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const data = await res.json();
         setUser(data.user);
       } else {
-        // Token invalid/expired
+        // Token might have expired, try to refresh
+        const newToken = await refreshAccessToken();
+        if (newToken) {
+          // Retry with new token
+          const retryRes = await fetch(`${API_URL}/api/auth/me`, {
+            headers: {
+              'Authorization': `Bearer ${newToken}`,
+            },
+          });
+          if (retryRes.ok) {
+            const data = await retryRes.json();
+            setUser(data.user);
+            return;
+          }
+        }
+        // If refresh fails, log out
         localStorage.removeItem('tmq_token');
         setUser(null);
       }
@@ -58,6 +90,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else {
       setLoading(false);
     }
+
+    // Refresh token every 10 minutes in the background
+    const interval = setInterval(async () => {
+      const currentToken = localStorage.getItem('tmq_token');
+      if (currentToken) {
+        await refreshAccessToken();
+      }
+    }, 10 * 60 * 1000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const signUp = async (email: string, password: string, name: string) => {

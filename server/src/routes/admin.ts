@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { AuthenticatedRequest, requireEditor, requireAdmin } from '../middleware/auth';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import { sendEmail } from '../lib/email';
 const router = Router();
 
 // Submissions List for Reviewers (Editors or Admins)
@@ -45,7 +46,7 @@ router.get('/submissions', requireEditor, async (req: AuthenticatedRequest, res:
 // Update Submission Status & Review Notes
 router.put('/submissions/:id/status', requireEditor, async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
-  const { status, editorNote } = req.body;
+  const { status, editorNote, score } = req.body;
 
   if (!status) {
     return res.status(400).json({ error: 'Status is required' });
@@ -56,11 +57,25 @@ router.put('/submissions/:id/status', requireEditor, async (req: AuthenticatedRe
     return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
   }
 
+  const validScores = ['MASTERWORK', 'FEATURED_STANDARD', 'PUBLICATION_READY', null, ''];
+  if (score !== undefined && !validScores.includes(score)) {
+    return res.status(400).json({ error: 'Invalid score badge tier.' });
+  }
+
   try {
     const currentSubmission = await prisma.submission.findUnique({ where: { id } });
     if (!currentSubmission) {
       return res.status(404).json({ error: 'Submission not found' });
     }
+
+    // Capture revision snapshot before status/editor change
+    await prisma.draftRevision.create({
+      data: {
+        submissionId: id,
+        title: currentSubmission.title,
+        body: currentSubmission.body,
+      },
+    });
 
     const updateData: any = {
       status: status as string,
@@ -71,6 +86,10 @@ router.put('/submissions/:id/status', requireEditor, async (req: AuthenticatedRe
 
     if (status === 'PUBLISHED' && !currentSubmission.publishedAt) {
       updateData.publishedAt = new Date();
+    }
+
+    if (score !== undefined) {
+      updateData.score = score === '' ? null : score;
     }
 
     const updated = await prisma.submission.update({
@@ -86,6 +105,48 @@ router.put('/submissions/:id/status', requireEditor, async (req: AuthenticatedRe
         },
       },
     });
+
+    // Hook combined status / score update notification email (Task 7)
+    const statusChanged = currentSubmission.status !== status;
+    const scoreChanged = currentSubmission.score !== score && score !== undefined;
+
+    if (statusChanged || scoreChanged) {
+      const authorName = updated.author.name;
+      let subject = `The Midnight Quill — Submission Update`;
+      let text = `Hello ${authorName},\n\n`;
+      let html = `<p>Hello ${authorName},</p>`;
+
+      if (status === 'PUBLISHED') {
+        subject = `The Midnight Quill — Published! 🎉`;
+        text += `We are thrilled to share that your piece "${currentSubmission.title}" is published on The Midnight Quill!\n`;
+        html += `<p>We are thrilled to share that your piece <strong>"${currentSubmission.title}"</strong> is published on The Midnight Quill!</p>`;
+        
+        const newScore = score || currentSubmission.score;
+        if (newScore) {
+          const badgeLabel = newScore.replace(/_/g, ' ');
+          text += `It has also been awarded the prestigious ${badgeLabel} badge!\n`;
+          html += `<p>It has also been awarded the prestigious <strong>${badgeLabel}</strong> badge!</p>`;
+        }
+      } else if (status === 'REJECTED') {
+        subject = `The Midnight Quill — Review Update`;
+        text += `Your piece "${currentSubmission.title}" has been reviewed. Here are the notes from the editors:\n\n"${editorNote || 'No notes left.'}"\n`;
+        html += `<p>Your piece <strong>"${currentSubmission.title}"</strong> has been reviewed. Here are the notes from the editors:</p><blockquote>"${editorNote || 'No notes left.'}"</blockquote>`;
+      } else {
+        text += `Your piece "${currentSubmission.title}" status has been updated to: ${status}.\n`;
+        html += `<p>Your piece <strong>"${currentSubmission.title}"</strong> status has been updated to: <strong>${status}</strong>.</p>`;
+      }
+
+      text += `\nBest regards,\nThe Midnight Quill Team`;
+      html += `<p>Best regards,<br/>The Midnight Quill Team</p>`;
+
+      // Async email dispatch
+      sendEmail({
+        to: updated.author.email,
+        subject,
+        text,
+        html,
+      }).catch((err) => console.error('Error sending moderation email:', err));
+    }
 
     return res.json({
       message: 'Submission updated successfully',
