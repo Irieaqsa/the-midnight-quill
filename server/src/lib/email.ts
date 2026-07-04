@@ -41,6 +41,8 @@ const getTransporter = async () => {
   });
 };
 
+import https from 'https';
+
 export const sendEmail = async ({
   to,
   subject,
@@ -52,9 +54,64 @@ export const sendEmail = async ({
   text: string;
   html?: string;
 }) => {
+  const host = process.env.SMTP_HOST || '';
+  const pass = process.env.SMTP_PASS || '';
+  const from = process.env.SMTP_FROM || 'The Midnight Quill <noreply@the-midnight-quill.onrender.com>';
+
+  // Render free tier blocks standard SMTP ports (25, 465, 587) outbound.
+  // If the user uses Resend (detected by host or API key prefix), we use their HTTP API on port 443.
+  const isResend = host.includes('resend.com') || pass.startsWith('re_');
+
+  if (isResend) {
+    console.log(`Resend detected. Bypassing blocked SMTP ports and sending via HTTPS API...`);
+    return new Promise<{ success: boolean; error?: any }>((resolve) => {
+      const payload = JSON.stringify({
+        from,
+        to,
+        subject,
+        text,
+        html,
+      });
+
+      const options = {
+        hostname: 'api.resend.com',
+        port: 443,
+        path: '/emails',
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${pass}`,
+          'Content-Type': 'application/json',
+          'Content-Length': payload.length,
+        },
+      };
+
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            console.log(`✅ Email sent via Resend API to ${to}`);
+            resolve({ success: true });
+          } else {
+            const err = new Error(`Resend API returned ${res.statusCode}: ${data}`);
+            console.error(`❌ Resend API error:`, err.message);
+            resolve({ success: false, error: err });
+          }
+        });
+      });
+
+      req.on('error', (err) => {
+        console.error(`❌ HTTPS request error:`, err);
+        resolve({ success: false, error: err });
+      });
+
+      req.write(payload);
+      req.end();
+    });
+  }
+
   try {
     const transporter = await getTransporter();
-    const from = process.env.SMTP_FROM || 'The Midnight Quill <noreply@the-midnight-quill.onrender.com>';
 
     const info = await transporter.sendMail({
       from,
