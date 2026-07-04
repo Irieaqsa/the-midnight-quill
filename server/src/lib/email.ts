@@ -134,11 +134,20 @@ export const sendEmail = async ({
         path: '/v3/mail/send',
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${pass}`,
+          'Authorization': `Bearer ${pass.trim()}`,
           'Content-Type': 'application/json',
           'Content-Length': payload.length,
         },
       };
+
+      console.log('SendGrid sending details:', {
+        fromEmail,
+        fromName,
+        to,
+        subject,
+        payloadLength: payload.length,
+        authHeaderTrimmedLength: pass.trim().length,
+      });
 
       const req = https.request(options, (res) => {
         let data = '';
