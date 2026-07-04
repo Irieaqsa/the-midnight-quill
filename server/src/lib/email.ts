@@ -68,7 +68,7 @@ export const sendEmail = async ({
     
     // If using Ethereal in development, print the preview URL
     if (info.messageId && info.envelope && !process.env.SMTP_HOST) {
-      console.log(`🔗 Preview reset email at: ${nodemailer.getTestMessageUrl(info)}`);
+      console.log(`🔗 Preview reset email at: ${nodemailer.getTestMessageUrl(info as any)}`);
     }
 
     return { success: true };
