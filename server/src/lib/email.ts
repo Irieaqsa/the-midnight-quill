@@ -8,15 +8,23 @@ const getTransporter = async () => {
   const pass = process.env.SMTP_PASS;
 
   if (host && user && pass) {
-    // Return standard production SMTP transporter
-    return nodemailer.createTransport({
+    const isGmail = host.toLowerCase().includes('gmail') || user.toLowerCase().includes('gmail');
+    const transportConfig: any = {
       host,
       port,
-      secure: port === 465, // True for 465, false for other ports
+      secure: port === 465,
       auth: { user, pass },
-      connectionTimeout: 10000, // 10 seconds timeout
-      socketTimeout: 10000,     // 10 seconds timeout
-    });
+      connectionTimeout: 10000,
+      socketTimeout: 10000,
+    };
+
+    if (isGmail) {
+      transportConfig.service = 'gmail';
+      delete transportConfig.host;
+      delete transportConfig.port;
+    }
+
+    return nodemailer.createTransport(transportConfig);
   }
 
   // Fallback to local Ethereal Email test account in development
