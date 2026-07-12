@@ -30,10 +30,13 @@ router.post('/signup', rateLimit(10), async (req, res) => {
     // Auto-promote founder emails to correct roles
     let role: 'MEMBER' | 'EDITOR' | 'ADMIN' = 'MEMBER';
     const lowerEmail = email.toLowerCase();
-    if (lowerEmail === 'irie1imran@mail.com' || lowerEmail === 'irie1imran@gmail.com') {
+    if (
+      lowerEmail === 'irie1imran@mail.com' ||
+      lowerEmail === 'irie1imran@gmail.com' ||
+      lowerEmail === 'dasritasree1@gmail.com' ||
+      lowerEmail === 'jnawaj.official@gmail.com'
+    ) {
       role = 'ADMIN';
-    } else if (lowerEmail === 'dasritasree1@gmail.com') {
-      role = 'EDITOR';
     }
 
     const user = await prisma.user.create({
